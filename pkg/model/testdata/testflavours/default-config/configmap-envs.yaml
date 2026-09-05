@@ -7,3 +7,4 @@ data:
   BASE_ENV2: "base value 2"
   BACKSTAGE_NAME: "{{.Backstage.Name}}"
   SERVICE_URL: "https://{{.Backstage.Name}}.{{.Backstage.Namespace}}.svc"
+  ROUTE_URL: "https://{{.Backstage.Name}}-{{.Backstage.Namespace}}.{{.OpenShift.IngressDomain}}"

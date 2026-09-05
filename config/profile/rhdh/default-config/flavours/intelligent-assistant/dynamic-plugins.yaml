@@ -42,4 +42,4 @@ data:
       - package: ref://red-hat-developer-hub-backstage-plugin-intelligent-assistant-backend
         enabled: true
         dependencies:
-          - ref: okp 
+          - ref: okp

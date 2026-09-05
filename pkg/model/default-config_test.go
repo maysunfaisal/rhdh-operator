@@ -284,7 +284,7 @@ func TestTemplateSubstitution_DefaultConfig(t *testing.T) {
 	t.Setenv("LOCALBIN", testDataDir)
 
 	// Set template data
-	utils.SetTemplateData("test-backstage", "test-ns")
+	utils.SetTemplateData("test-backstage", "test-ns", "apps.example.com")
 
 	scheme := runtime.NewScheme()
 	require.NoError(t, corev1.AddToScheme(scheme))
@@ -301,6 +301,7 @@ func TestTemplateSubstitution_DefaultConfig(t *testing.T) {
 	cm := objs[0].(*corev1.ConfigMap)
 	assert.Equal(t, "test-backstage", cm.Data["BACKSTAGE_NAME"])
 	assert.Equal(t, "https://test-backstage.test-ns.svc", cm.Data["SERVICE_URL"])
+	assert.Equal(t, "https://test-backstage-test-ns.apps.example.com", cm.Data["ROUTE_URL"])
 }
 
 func TestTemplateSubstitution_Flavour(t *testing.T) {
@@ -309,7 +310,7 @@ func TestTemplateSubstitution_Flavour(t *testing.T) {
 	t.Setenv("LOCALBIN", testDataDir)
 
 	// Set template data
-	utils.SetTemplateData("my-instance", "my-ns")
+	utils.SetTemplateData("my-instance", "my-ns", "apps.example.com")
 
 	scheme := runtime.NewScheme()
 	require.NoError(t, corev1.AddToScheme(scheme))

@@ -148,7 +148,7 @@ func TestPlatformPatchMerge(t *testing.T) {
 
 func TestReadYamlsWithTemplateSubstitution(t *testing.T) {
 	// Set template data
-	SetTemplateData("my-backstage", "my-namespace")
+	SetTemplateData("my-backstage", "my-namespace", "apps.example.com")
 	defer func() { templateData = nil }()
 
 	// Read YAML with template variables
@@ -161,11 +161,12 @@ func TestReadYamlsWithTemplateSubstitution(t *testing.T) {
 	assert.Equal(t, "config-my-backstage", cm.Name)
 	assert.Equal(t, "my-namespace", cm.Namespace)
 	assert.Equal(t, "https://my-backstage.my-namespace.svc", cm.Data["SERVICE_URL"])
+	assert.Equal(t, "http://config-my-backstage-my-namespace.apps.example.com", cm.Data["ROUTE_URL"])
 }
 
 func TestApplyTemplateSkipsNonBackstagePatterns(t *testing.T) {
 	// Set template data
-	SetTemplateData("my-backstage", "my-namespace")
+	SetTemplateData("my-backstage", "my-namespace", "apps.example.com")
 	defer func() { templateData = nil }()
 
 	// Content with other {{...}} patterns that are NOT our Backstage variables
