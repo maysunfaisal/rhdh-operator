@@ -22,6 +22,8 @@ data:
     kind: Deployment
     metadata:
       name: lightspeed-okp-{{backstage-name}}
+      annotations:
+        rhdh.redhat.com/platform: "ocp"
     spec:
       replicas: 1
       selector:
@@ -101,6 +103,8 @@ data:
     kind: Service
     metadata:
       name: lightspeed-okp-{{backstage-name}}
+      annotations:
+        rhdh.redhat.com/platform: "ocp"
     spec:
       type: ClusterIP
       selector:

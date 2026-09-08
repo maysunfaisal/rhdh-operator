@@ -5,12 +5,15 @@ import (
 	"fmt"
 	"strings"
 	"text/template"
+
+	"github.com/redhat-developer/rhdh-operator/pkg/platform"
 )
 
 // TemplateData provides values for Go template substitution in config files.
 type TemplateData struct {
 	Backstage BackstageInfo
 	OpenShift OpenShiftInfo
+	Platform  platform.Platform
 }
 
 // BackstageInfo contains Backstage CR fields available for templating in config files.
@@ -29,7 +32,7 @@ var templateData *TemplateData
 
 // SetTemplateData sets the template data for YAML file processing.
 // Call this once before reading config files.
-func SetTemplateData(name, namespace, openShiftIngressDomain string) {
+func SetTemplateData(name, namespace, openShiftIngressDomain string, detectedPlatform platform.Platform) {
 	templateData = &TemplateData{
 		Backstage: BackstageInfo{
 			Name:      name,
@@ -38,20 +41,22 @@ func SetTemplateData(name, namespace, openShiftIngressDomain string) {
 		OpenShift: OpenShiftInfo{
 			IngressDomain: openShiftIngressDomain,
 		},
+		Platform: detectedPlatform,
 	}
 }
 
 // ApplyTemplate applies Go template substitution to content if templateData is set
-// and the content contains our template variables ({{.Backstage.}}).
+// and the content contains one of our supported template variables.
 // Returns content unchanged if no template data has been set or no template variables found.
 func ApplyTemplate(content []byte) ([]byte, error) {
 	if templateData == nil {
 		return content, nil
 	}
-	// Only parse as template if our specific variables are present
-	// This avoids parsing errors from other {{...}} patterns in config files
-	if !strings.Contains(string(content), "{{.Backstage.") &&
-		!strings.Contains(string(content), "{{.OpenShift.") {
+	// Only parse as a template if a template action references one of our
+	// supported data groups. This avoids parsing application-owned patterns such
+	// as {{message}}, while supporting control actions such as
+	// {{if eq .Platform.Extension "ocp"}}.
+	if !containsSupportedTemplateField(string(content)) {
 		return content, nil
 	}
 	tmpl, err := template.New("config").Parse(string(content))
@@ -63,4 +68,25 @@ func ApplyTemplate(content []byte) ([]byte, error) {
 		return nil, fmt.Errorf("failed to execute template: %w", err)
 	}
 	return buf.Bytes(), nil
+}
+
+func containsSupportedTemplateField(content string) bool {
+	for {
+		start := strings.Index(content, "{{")
+		if start == -1 {
+			return false
+		}
+		content = content[start+2:]
+		end := strings.Index(content, "}}")
+		if end == -1 {
+			return false
+		}
+		action := content[:end]
+		if strings.Contains(action, ".Backstage.") ||
+			strings.Contains(action, ".OpenShift.") ||
+			strings.Contains(action, ".Platform.") {
+			return true
+		}
+		content = content[end+2:]
+	}
 }

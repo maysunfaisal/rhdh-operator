@@ -13,6 +13,7 @@ import (
 	"github.com/redhat-developer/rhdh-operator/api"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -326,14 +327,22 @@ var _ = When("create default rhdh", func() {
 			err := k8sClient.List(ctx, cmList, client.InNamespace(ns))
 			g.Expect(err).ShouldNot(HaveOccurred())
 
-			// check if contains ConfigMaps with "flavour-intelligent-assistant" source
+			// Check that Intelligent Assistant is configured without OKP on Kubernetes.
 			foundSource := false
+			foundLightspeedConfig := false
 			for _, cm := range cmList.Items {
 				if cm.Annotations[model.SourceAnnotation] == "flavour-intelligent-assistant" {
 					foundSource = true
 				}
+				if cm.Annotations[model.ConfiguredNameAnnotation] == "lightspeed-stack-config" {
+					foundLightspeedConfig = true
+					g.Expect(cm.Data).NotTo(HaveKey("lightspeed-stack-no-okp.yaml"))
+					g.Expect(cm.Data["lightspeed-stack.yaml"]).NotTo(ContainSubstring("\nrag:\n"))
+					g.Expect(cm.Data["lightspeed-stack.yaml"]).NotTo(ContainSubstring("\nokp:\n"))
+				}
 			}
 			g.Expect(foundSource).To(BeTrue())
+			g.Expect(foundLightspeedConfig).To(BeTrue())
 
 			deploy, err := backstageDeployment(ctx, k8sClient, ns, backstageName)
 			g.Expect(err).To(Not(HaveOccurred()))
@@ -342,6 +351,9 @@ var _ = When("create default rhdh", func() {
 			for _, c := range deploy.PodSpec().Containers {
 				if c.Name == "lightspeed-core" {
 					foundLightspeedCore = true
+					for _, env := range c.Env {
+						g.Expect(env.Name).NotTo(Equal("OKP_SERVICE_URL"))
+					}
 				}
 			}
 			g.Expect(foundLightspeedCore).To(BeTrue())
@@ -349,11 +361,11 @@ var _ = When("create default rhdh", func() {
 			okpName := "lightspeed-okp-" + backstageName
 			okpDeployment := &appsv1.Deployment{}
 			err = k8sClient.Get(ctx, types.NamespacedName{Namespace: ns, Name: okpName}, okpDeployment)
-			g.Expect(err).ShouldNot(HaveOccurred())
+			g.Expect(errors.IsNotFound(err)).To(BeTrue())
 
 			okpService := &corev1.Service{}
 			err = k8sClient.Get(ctx, types.NamespacedName{Namespace: ns, Name: okpName}, okpService)
-			g.Expect(err).ShouldNot(HaveOccurred())
+			g.Expect(errors.IsNotFound(err)).To(BeTrue())
 
 		}, 20*time.Second, time.Second).Should(Succeed())
 

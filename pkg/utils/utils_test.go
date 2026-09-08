@@ -6,8 +6,10 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 
 	openshift "github.com/openshift/api/route/v1"
+	"github.com/redhat-developer/rhdh-operator/pkg/platform"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -148,7 +150,7 @@ func TestPlatformPatchMerge(t *testing.T) {
 
 func TestReadYamlsWithTemplateSubstitution(t *testing.T) {
 	// Set template data
-	SetTemplateData("my-backstage", "my-namespace", "apps.example.com")
+	SetTemplateData("my-backstage", "my-namespace", "apps.example.com", platform.OpenShift)
 	defer func() { templateData = nil }()
 
 	// Read YAML with template variables
@@ -162,11 +164,13 @@ func TestReadYamlsWithTemplateSubstitution(t *testing.T) {
 	assert.Equal(t, "my-namespace", cm.Namespace)
 	assert.Equal(t, "https://my-backstage.my-namespace.svc", cm.Data["SERVICE_URL"])
 	assert.Equal(t, "http://config-my-backstage-my-namespace.apps.example.com", cm.Data["ROUTE_URL"])
+	assert.Equal(t, "OpenShift", cm.Data["PLATFORM_NAME"])
+	assert.Equal(t, "enabled", cm.Data["OPENSHIFT_ONLY"])
 }
 
 func TestApplyTemplateSkipsNonBackstagePatterns(t *testing.T) {
 	// Set template data
-	SetTemplateData("my-backstage", "my-namespace", "apps.example.com")
+	SetTemplateData("my-backstage", "my-namespace", "apps.example.com", platform.OpenShift)
 	defer func() { templateData = nil }()
 
 	// Content with other {{...}} patterns that are NOT our Backstage variables
@@ -186,6 +190,30 @@ data:
 	assert.NoError(t, err)
 	// Content should be unchanged since it doesn't contain {{.Backstage.
 	assert.Equal(t, content, result)
+}
+
+func TestApplyTemplatePlatformConditional(t *testing.T) {
+	content := []byte(`always
+{{if eq .Platform.Extension "ocp"}}openshift
+{{end}}`)
+
+	tests := []struct {
+		name     string
+		platform platform.Platform
+		want     string
+	}{
+		{name: "OpenShift", platform: platform.OpenShift, want: "always\nopenshift\n"},
+		{name: "Kubernetes", platform: platform.Kubernetes, want: "always\n"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			SetTemplateData("my-backstage", "my-namespace", "apps.example.com", tt.platform)
+			result, err := ApplyTemplate(content)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, string(result))
+		})
+	}
 }
 
 func TestGetObjectKind(t *testing.T) {

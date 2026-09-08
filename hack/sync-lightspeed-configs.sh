@@ -60,6 +60,37 @@ indent_file() {
     sed 's/^/    /' "$1"
 }
 
+render_stack_block() {
+    awk '
+        function start_platform_guard() {
+            print "    {{if eq .Platform.Extension \"ocp\"}}"
+            guarded = 1
+        }
+
+        function end_platform_guard() {
+            print "    {{end}}"
+            guarded = 0
+        }
+
+        /^[[:alnum:]_-]+:[[:space:]]*$/ {
+            okp_section = ($0 == "rag:" || $0 == "okp:")
+            if (guarded && !okp_section) {
+                end_platform_guard()
+            } else if (!guarded && okp_section) {
+                start_platform_guard()
+            }
+        }
+
+        { print "    " $0 }
+
+        END {
+            if (guarded) {
+                end_platform_guard()
+            }
+        }
+    ' "$1"
+}
+
 render_secret_entries() {
     awk -F= '
         { sub(/\r$/, "") }
@@ -162,7 +193,7 @@ main() {
     fetch_upstream_file "$UPSTREAM_ENV_PATH" "$env_file"
 
     indent_file "$config_file" > "$config_block"
-    indent_file "$stack_file" > "$stack_block"
+    render_stack_block "$stack_file" > "$stack_block"
     indent_file "$profile_file" > "$profile_block"
     render_secret_entries "$env_file" > "$secret_entries"
 

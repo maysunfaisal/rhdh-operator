@@ -6,6 +6,8 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: lightspeed-okp-{{backstage-name}}
+  annotations:
+    rhdh.redhat.com/platform: "ocp"
 spec:
   replicas: 1
   selector:
@@ -85,6 +87,8 @@ apiVersion: v1
 kind: Service
 metadata:
   name: lightspeed-okp-{{backstage-name}}
+  annotations:
+    rhdh.redhat.com/platform: "ocp"
 spec:
   type: ClusterIP
   selector:

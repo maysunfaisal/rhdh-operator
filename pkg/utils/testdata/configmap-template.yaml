@@ -6,3 +6,7 @@ metadata:
 data:
   SERVICE_URL: "https://{{.Backstage.Name}}.{{.Backstage.Namespace}}.svc"
   ROUTE_URL: "http://config-{{.Backstage.Name}}-{{.Backstage.Namespace}}.{{.OpenShift.IngressDomain}}"
+  PLATFORM_NAME: "{{.Platform.Name}}"
+{{if eq .Platform.Extension "ocp"}}
+  OPENSHIFT_ONLY: "enabled"
+{{end}}

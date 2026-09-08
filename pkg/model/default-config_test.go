@@ -3,14 +3,17 @@ package model
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"gopkg.in/yaml.v2"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/redhat-developer/rhdh-operator/api"
+	"github.com/redhat-developer/rhdh-operator/pkg/platform"
 	"github.com/redhat-developer/rhdh-operator/pkg/utils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -284,7 +287,7 @@ func TestTemplateSubstitution_DefaultConfig(t *testing.T) {
 	t.Setenv("LOCALBIN", testDataDir)
 
 	// Set template data
-	utils.SetTemplateData("test-backstage", "test-ns", "apps.example.com")
+	utils.SetTemplateData("test-backstage", "test-ns", "apps.example.com", platform.OpenShift)
 
 	scheme := runtime.NewScheme()
 	require.NoError(t, corev1.AddToScheme(scheme))
@@ -310,7 +313,7 @@ func TestTemplateSubstitution_Flavour(t *testing.T) {
 	t.Setenv("LOCALBIN", testDataDir)
 
 	// Set template data
-	utils.SetTemplateData("my-instance", "my-ns", "apps.example.com")
+	utils.SetTemplateData("my-instance", "my-ns", "apps.example.com", platform.OpenShift)
 
 	scheme := runtime.NewScheme()
 	require.NoError(t, corev1.AddToScheme(scheme))
@@ -340,4 +343,126 @@ func TestTemplateSubstitution_Flavour(t *testing.T) {
 	}
 	require.NotNil(t, flavor1CM, "flavor1 configmap should exist")
 	assert.Equal(t, "my-instance-flavor1", flavor1CM.Data["FLAVOR1_BACKSTAGE"])
+}
+
+func TestMergeDeploymentsWithPlatformConditional(t *testing.T) {
+	scheme := runtime.NewScheme()
+	require.NoError(t, appsv1.AddToScheme(scheme))
+
+	sources := []configSource{
+		{
+			path: "base.yaml",
+			content: []byte(`apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backstage
+spec:
+  template:
+    spec:
+      containers:
+        - name: backstage-backend
+          image: backstage:latest
+`),
+		},
+		{
+			path:        "flavour.yaml",
+			flavourName: "test",
+			content: []byte(`apiVersion: apps/v1
+kind: Deployment
+spec:
+  template:
+    spec:
+      containers:
+        - name: lightspeed-core
+          image: lightspeed-core:latest
+          env:
+{{if eq .Platform.Extension "ocp"}}
+            - name: OKP_SERVICE_URL
+              value: https://okp.example.com
+{{end}}
+            - name: OTEL_SDK_DISABLED
+              value: "true"
+`),
+		},
+	}
+
+	tests := []struct {
+		name       string
+		platform   platform.Platform
+		wantOKPEnv bool
+	}{
+		{name: "OpenShift", platform: platform.OpenShift, wantOKPEnv: true},
+		{name: "Kubernetes", platform: platform.Kubernetes, wantOKPEnv: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			utils.SetTemplateData("test-backstage", "test-ns", "apps.example.com", tt.platform)
+			objs, err := mergeDeployments(sources, *scheme, tt.platform.Extension)
+			require.NoError(t, err)
+			require.Len(t, objs, 1)
+
+			deployment := objs[0].(*appsv1.Deployment)
+			var lightspeedCore *corev1.Container
+			for i := range deployment.Spec.Template.Spec.Containers {
+				if deployment.Spec.Template.Spec.Containers[i].Name == "lightspeed-core" {
+					lightspeedCore = &deployment.Spec.Template.Spec.Containers[i]
+					break
+				}
+			}
+			require.NotNil(t, lightspeedCore)
+
+			hasOKPEnv := false
+			for _, env := range lightspeedCore.Env {
+				if env.Name == "OKP_SERVICE_URL" {
+					hasOKPEnv = true
+				}
+			}
+			assert.Equal(t, tt.wantOKPEnv, hasOKPEnv)
+		})
+	}
+}
+
+func TestIntelligentAssistantConfigPlatformConditional(t *testing.T) {
+	scheme := runtime.NewScheme()
+	require.NoError(t, corev1.AddToScheme(scheme))
+
+	configPath := filepath.Join(
+		"..", "..", "config", "profile", "rhdh", "default-config", "flavours",
+		"intelligent-assistant", "configmap-files.yaml",
+	)
+	content, err := os.ReadFile(configPath)
+	require.NoError(t, err)
+
+	tests := []struct {
+		name          string
+		platform      platform.Platform
+		wantOKPConfig bool
+	}{
+		{name: "OpenShift", platform: platform.OpenShift, wantOKPConfig: true},
+		{name: "Kubernetes", platform: platform.Kubernetes, wantOKPConfig: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			utils.SetTemplateData("test-backstage", "test-ns", "apps.example.com", tt.platform)
+			objects, err := utils.ReadYamls(content, nil, *scheme)
+			require.NoError(t, err)
+
+			var lightspeedConfig *corev1.ConfigMap
+			for _, obj := range objects {
+				configMap := obj.(*corev1.ConfigMap)
+				if configMap.Name == "lightspeed-stack-config" {
+					lightspeedConfig = configMap
+					break
+				}
+			}
+			require.NotNil(t, lightspeedConfig)
+			assert.NotContains(t, lightspeedConfig.Data, "lightspeed-stack-no-okp.yaml")
+
+			stackConfig := lightspeedConfig.Data["lightspeed-stack.yaml"]
+			assert.Equal(t, tt.wantOKPConfig, strings.Contains(stackConfig, "\nrag:\n"))
+			assert.Equal(t, tt.wantOKPConfig, strings.Contains(stackConfig, "\nokp:\n"))
+		})
+	}
 }

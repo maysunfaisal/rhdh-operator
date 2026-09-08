@@ -32,9 +32,11 @@ spec:
             - "--synthesized-config-output"
             - "/tmp/.generated/run.yaml"
           env:
+{{if eq .Platform.Extension "ocp"}}
             # LCORE uses this URL both to query OKP and to construct browser-facing citation links.
             - name: OKP_SERVICE_URL
               value: "http://lightspeed-okp-{{.Backstage.Name}}-{{.Backstage.Namespace}}.{{.OpenShift.IngressDomain}}"
+{{end}}
             - name: HF_HOME
               value: /tmp/hf_cache
             - name: OTEL_SDK_DISABLED

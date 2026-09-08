@@ -512,11 +512,23 @@ func mergeDeployments(sources []configSource, scheme runtime.Scheme, platformExt
 	if len(sources) == 0 {
 		return []client.Object{}, nil
 	}
-	mergedYAML := sources[0].content
+
+	// Render each source before merging so template control structures may add
+	// or remove complete YAML fields without being parsed by the YAML merger.
+	renderedSources := make([][]byte, len(sources))
+	for i, src := range sources {
+		rendered, err := utils.ApplyTemplate(src.content)
+		if err != nil {
+			return nil, fmt.Errorf("failed to apply template to deployment from %s: %w", src.path, err)
+		}
+		renderedSources[i] = rendered
+	}
+
+	mergedYAML := renderedSources[0]
 
 	// Merge with flavour patches
 	for i := 1; i < len(sources); i++ {
-		mergedStr, err := merge2.MergeStrings(string(sources[i].content), string(mergedYAML), false, kyaml.MergeOptions{})
+		mergedStr, err := merge2.MergeStrings(string(renderedSources[i]), string(mergedYAML), false, kyaml.MergeOptions{})
 		if err != nil {
 			return nil, fmt.Errorf("failed to merge deployment from %s: %w", sources[i].path, err)
 		}

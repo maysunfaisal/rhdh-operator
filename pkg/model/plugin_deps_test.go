@@ -228,6 +228,18 @@ metadata:
 	}
 }
 
+func TestOKPPluginDependencyIsOpenShiftOnly(t *testing.T) {
+	dir := filepath.Join("..", "..", "config", "profile", "rhdh", "plugin-deps")
+
+	ocpObjects, err := ReadPluginDeps(dir, "test-backstage", "test-ns", []string{"okp"}, "ocp")
+	assert.NoError(t, err)
+	assert.Len(t, ocpObjects, 3)
+
+	k8sObjects, err := ReadPluginDeps(dir, "test-backstage", "test-ns", []string{"okp"}, "k8s")
+	assert.NoError(t, err)
+	assert.Empty(t, k8sObjects)
+}
+
 func TestMatchesPlatform(t *testing.T) {
 	tests := []struct {
 		name        string
