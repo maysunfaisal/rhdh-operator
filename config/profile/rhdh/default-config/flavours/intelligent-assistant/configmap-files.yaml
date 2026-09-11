@@ -244,7 +244,7 @@ data:
         url: 'http://localhost:7007/api/mcp-actions/v1'
         authorization_headers:
           Authorization: 'client'
-    {{if eq .Platform.Extension "ocp"}}
+    {{if or (eq .Platform.Extension "ocp") (pluginDependencyEnabled "okp")}}
     rag:
       tool:
         - okp

@@ -8,6 +8,8 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/redhat-developer/rhdh-operator/api"
+	"github.com/redhat-developer/rhdh-operator/pkg/platform"
+	"github.com/redhat-developer/rhdh-operator/pkg/utils"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -228,16 +230,43 @@ metadata:
 	}
 }
 
-func TestOKPPluginDependencyIsOpenShiftOnly(t *testing.T) {
+func TestOKPPluginDependencyPlatformBehavior(t *testing.T) {
 	dir := filepath.Join("..", "..", "config", "profile", "rhdh", "plugin-deps")
 
+	utils.SetTemplateData("test-backstage", "test-ns", "apps.example.com", platform.OpenShift, nil)
 	ocpObjects, err := ReadPluginDeps(dir, "test-backstage", "test-ns", []string{"okp"}, "ocp")
 	assert.NoError(t, err)
 	assert.Len(t, ocpObjects, 3)
 
+	utils.SetTemplateData("test-backstage", "test-ns", "", platform.Kubernetes, nil)
 	k8sObjects, err := ReadPluginDeps(dir, "test-backstage", "test-ns", []string{"okp"}, "k8s")
 	assert.NoError(t, err)
 	assert.Empty(t, k8sObjects)
+
+	utils.SetTemplateData("test-backstage", "test-ns", "", platform.Kubernetes, map[string]map[string]string{
+		"okp": {
+			"OKP_INGRESS_HOST":            "okp.example.com",
+			"OKP_INGRESS_CLASS_NAME":      "nginx",
+			"OKP_INGRESS_TLS_ENABLED":     "true",
+			"OKP_INGRESS_TLS_SECRET_NAME": "okp-tls",
+		},
+	})
+	k8sObjects, err = ReadPluginDeps(dir, "test-backstage", "test-ns", []string{"okp"}, "k8s")
+	assert.NoError(t, err)
+	assert.Len(t, k8sObjects, 3)
+	assert.ElementsMatch(t, []string{"Deployment", "Service", "Ingress"}, []string{
+		k8sObjects[0].GetKind(), k8sObjects[1].GetKind(), k8sObjects[2].GetKind(),
+	})
+	for _, object := range k8sObjects {
+		if object.GetKind() != "Ingress" {
+			continue
+		}
+		rules, found, err := unstructured.NestedSlice(object.Object, "spec", "rules")
+		assert.NoError(t, err)
+		assert.True(t, found)
+		assert.Equal(t, "okp.example.com", rules[0].(map[string]interface{})["host"])
+		assert.Equal(t, "nginx", object.Object["spec"].(map[string]interface{})["ingressClassName"])
+	}
 }
 
 func TestMatchesPlatform(t *testing.T) {

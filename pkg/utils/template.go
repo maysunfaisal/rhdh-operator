@@ -3,6 +3,7 @@ package utils
 import (
 	"bytes"
 	"fmt"
+	"strconv"
 	"strings"
 	"text/template"
 
@@ -11,9 +12,10 @@ import (
 
 // TemplateData provides values for Go template substitution in config files.
 type TemplateData struct {
-	Backstage BackstageInfo
-	OpenShift OpenShiftInfo
-	Platform  platform.Platform
+	Backstage          BackstageInfo
+	OpenShift          OpenShiftInfo
+	Platform           platform.Platform
+	PluginDependencies map[string]map[string]string
 }
 
 // BackstageInfo contains Backstage CR fields available for templating in config files.
@@ -32,7 +34,10 @@ var templateData *TemplateData
 
 // SetTemplateData sets the template data for YAML file processing.
 // Call this once before reading config files.
-func SetTemplateData(name, namespace, openShiftIngressDomain string, detectedPlatform platform.Platform) {
+func SetTemplateData(name, namespace, openShiftIngressDomain string, detectedPlatform platform.Platform, pluginDependencyConfigs map[string]map[string]string) {
+	if pluginDependencyConfigs == nil {
+		pluginDependencyConfigs = map[string]map[string]string{}
+	}
 	templateData = &TemplateData{
 		Backstage: BackstageInfo{
 			Name:      name,
@@ -41,7 +46,8 @@ func SetTemplateData(name, namespace, openShiftIngressDomain string, detectedPla
 		OpenShift: OpenShiftInfo{
 			IngressDomain: openShiftIngressDomain,
 		},
-		Platform: detectedPlatform,
+		Platform:           detectedPlatform,
+		PluginDependencies: pluginDependencyConfigs,
 	}
 }
 
@@ -59,7 +65,26 @@ func ApplyTemplate(content []byte) ([]byte, error) {
 	if !containsSupportedTemplateField(string(content)) {
 		return content, nil
 	}
-	tmpl, err := template.New("config").Parse(string(content))
+	tmpl, err := template.New("config").Funcs(template.FuncMap{
+		"pluginDependencyEnabled": func(ref string) bool {
+			_, exists := templateData.PluginDependencies[ref]
+			return exists
+		},
+		"pluginDependencyValue": func(ref, key string) string {
+			return templateData.PluginDependencies[ref][key]
+		},
+		"required": func(message, value string) (string, error) {
+			if strings.TrimSpace(value) == "" {
+				return "", fmt.Errorf("%s", message)
+			}
+			return value, nil
+		},
+		"quote": strconv.Quote,
+		"isTrue": func(value string) bool {
+			parsed, err := strconv.ParseBool(value)
+			return err == nil && parsed
+		},
+	}).Parse(string(content))
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse template: %w", err)
 	}
@@ -84,7 +109,8 @@ func containsSupportedTemplateField(content string) bool {
 		action := content[:end]
 		if strings.Contains(action, ".Backstage.") ||
 			strings.Contains(action, ".OpenShift.") ||
-			strings.Contains(action, ".Platform.") {
+			strings.Contains(action, ".Platform.") ||
+			strings.Contains(action, "pluginDependency") {
 			return true
 		}
 		content = content[end+2:]

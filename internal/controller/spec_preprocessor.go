@@ -117,6 +117,21 @@ func (r *BackstageReconciler) preprocessSpec(ctx context.Context, backstage api.
 				return result, err
 			}
 			result.ExtraEnvConfigMapKeys[ee.Name] = model.NewDataObjectKeys(cm.Data, cm.BinaryData)
+
+			if dependencyRef := cm.Labels[model.PluginDependencyConfigLabel]; dependencyRef != "" {
+				if _, exists := result.PluginDependencyConfigs[dependencyRef]; exists {
+					return result, fmt.Errorf("multiple extra environment ConfigMaps configure plugin dependency %q", dependencyRef)
+				}
+				values := make(map[string]string, len(cm.Data))
+				if ee.Key != "" {
+					values[ee.Key] = cm.Data[ee.Key]
+				} else {
+					for key, value := range cm.Data {
+						values[key] = value
+					}
+				}
+				result.PluginDependencyConfigs[dependencyRef] = values
+			}
 		}
 	}
 

@@ -7,16 +7,18 @@ import (
 
 const ExtConfigSyncLabel = "rhdh.redhat.com/ext-config-sync"
 const BackstageNameAnnotation = "rhdh.redhat.com/backstage-name"
+const PluginDependencyConfigLabel = "rhdh.redhat.com/plugin-dependency"
 
 type ExternalConfig struct {
-	RawConfig              map[string]string
-	DynamicPlugins         corev1.ConfigMap
-	AppConfigKeys          map[string][]string
-	ExtraFileConfigMapKeys map[string]DataObjectKeys
-	ExtraFileSecretKeys    map[string]DataObjectKeys
-	ExtraEnvConfigMapKeys  map[string]DataObjectKeys
-	ExtraEnvSecretKeys     map[string]DataObjectKeys
-	ExtraPvcKeys           []string
+	RawConfig               map[string]string
+	DynamicPlugins          corev1.ConfigMap
+	AppConfigKeys           map[string][]string
+	ExtraFileConfigMapKeys  map[string]DataObjectKeys
+	ExtraFileSecretKeys     map[string]DataObjectKeys
+	ExtraEnvConfigMapKeys   map[string]DataObjectKeys
+	ExtraEnvSecretKeys      map[string]DataObjectKeys
+	ExtraPvcKeys            []string
+	PluginDependencyConfigs map[string]map[string]string
 
 	OpenShiftIngressDomain string
 
@@ -26,14 +28,15 @@ type ExternalConfig struct {
 func NewExternalConfig() ExternalConfig {
 
 	return ExternalConfig{
-		RawConfig:              map[string]string{},
-		DynamicPlugins:         corev1.ConfigMap{},
-		AppConfigKeys:          map[string][]string{},
-		ExtraFileConfigMapKeys: map[string]DataObjectKeys{},
-		ExtraFileSecretKeys:    map[string]DataObjectKeys{},
-		ExtraEnvConfigMapKeys:  map[string]DataObjectKeys{},
-		ExtraEnvSecretKeys:     map[string]DataObjectKeys{},
-		ExtraPvcKeys:           []string{},
+		RawConfig:               map[string]string{},
+		DynamicPlugins:          corev1.ConfigMap{},
+		AppConfigKeys:           map[string][]string{},
+		ExtraFileConfigMapKeys:  map[string]DataObjectKeys{},
+		ExtraFileSecretKeys:     map[string]DataObjectKeys{},
+		ExtraEnvConfigMapKeys:   map[string]DataObjectKeys{},
+		ExtraEnvSecretKeys:      map[string]DataObjectKeys{},
+		ExtraPvcKeys:            []string{},
+		PluginDependencyConfigs: map[string]map[string]string{},
 
 		WatchingHash: "",
 	}

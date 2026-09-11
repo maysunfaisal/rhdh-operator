@@ -95,9 +95,13 @@ func ReadPluginDeps(rootDir, bsName, bsNamespace string, enabled []string, platf
 		// See utils.ApplyTemplate() for the new implementation.
 		modifiedContent := strings.ReplaceAll(string(content), "{{backstage-name}}", bsName)
 		modifiedContent = strings.ReplaceAll(modifiedContent, "{{backstage-ns}}", bsNamespace)
+		renderedContent, err := utils.ApplyTemplate([]byte(modifiedContent))
+		if err != nil {
+			return nil, fmt.Errorf("failed to apply template to plugin dependency file %s: %w", file, err)
+		}
 
 		// Parse the modified content
-		objs, err := utils.ReadYamlContent(modifiedContent)
+		objs, err := utils.ReadYamlContent(string(renderedContent))
 
 		if err != nil {
 			return nil, fmt.Errorf("failed to read YAML file %s: %w", file, err)

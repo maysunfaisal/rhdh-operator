@@ -287,7 +287,7 @@ func TestTemplateSubstitution_DefaultConfig(t *testing.T) {
 	t.Setenv("LOCALBIN", testDataDir)
 
 	// Set template data
-	utils.SetTemplateData("test-backstage", "test-ns", "apps.example.com", platform.OpenShift)
+	utils.SetTemplateData("test-backstage", "test-ns", "apps.example.com", platform.OpenShift, nil)
 
 	scheme := runtime.NewScheme()
 	require.NoError(t, corev1.AddToScheme(scheme))
@@ -313,7 +313,7 @@ func TestTemplateSubstitution_Flavour(t *testing.T) {
 	t.Setenv("LOCALBIN", testDataDir)
 
 	// Set template data
-	utils.SetTemplateData("my-instance", "my-ns", "apps.example.com", platform.OpenShift)
+	utils.SetTemplateData("my-instance", "my-ns", "apps.example.com", platform.OpenShift, nil)
 
 	scheme := runtime.NewScheme()
 	require.NoError(t, corev1.AddToScheme(scheme))
@@ -379,6 +379,9 @@ spec:
 {{if eq .Platform.Extension "ocp"}}
             - name: OKP_SERVICE_URL
               value: https://okp.example.com
+{{else if pluginDependencyEnabled "okp"}}
+            - name: OKP_SERVICE_URL
+              value: https://okp.k8s.example.com
 {{end}}
             - name: OTEL_SDK_DISABLED
               value: "true"
@@ -389,15 +392,22 @@ spec:
 	tests := []struct {
 		name       string
 		platform   platform.Platform
+		pluginDeps map[string]map[string]string
 		wantOKPEnv bool
 	}{
 		{name: "OpenShift", platform: platform.OpenShift, wantOKPEnv: true},
 		{name: "Kubernetes", platform: platform.Kubernetes, wantOKPEnv: false},
+		{
+			name:       "Kubernetes with OKP opt-in",
+			platform:   platform.Kubernetes,
+			pluginDeps: map[string]map[string]string{"okp": {"OKP_INGRESS_HOST": "okp.k8s.example.com"}},
+			wantOKPEnv: true,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			utils.SetTemplateData("test-backstage", "test-ns", "apps.example.com", tt.platform)
+			utils.SetTemplateData("test-backstage", "test-ns", "apps.example.com", tt.platform, tt.pluginDeps)
 			objs, err := mergeDeployments(sources, *scheme, tt.platform.Extension)
 			require.NoError(t, err)
 			require.Len(t, objs, 1)
@@ -437,15 +447,22 @@ func TestIntelligentAssistantConfigPlatformConditional(t *testing.T) {
 	tests := []struct {
 		name          string
 		platform      platform.Platform
+		pluginDeps    map[string]map[string]string
 		wantOKPConfig bool
 	}{
 		{name: "OpenShift", platform: platform.OpenShift, wantOKPConfig: true},
 		{name: "Kubernetes", platform: platform.Kubernetes, wantOKPConfig: false},
+		{
+			name:          "Kubernetes with OKP opt-in",
+			platform:      platform.Kubernetes,
+			pluginDeps:    map[string]map[string]string{"okp": {"OKP_INGRESS_HOST": "okp.k8s.example.com"}},
+			wantOKPConfig: true,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			utils.SetTemplateData("test-backstage", "test-ns", "apps.example.com", tt.platform)
+			utils.SetTemplateData("test-backstage", "test-ns", "apps.example.com", tt.platform, tt.pluginDeps)
 			objects, err := utils.ReadYamls(content, nil, *scheme)
 			require.NoError(t, err)
 

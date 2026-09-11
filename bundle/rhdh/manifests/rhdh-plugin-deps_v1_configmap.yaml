@@ -23,7 +23,7 @@ data:
     metadata:
       name: lightspeed-okp-{{backstage-name}}
       annotations:
-        rhdh.redhat.com/platform: "ocp"
+        rhdh.redhat.com/platform: '{{if eq .Platform.Extension "ocp"}}ocp{{else if pluginDependencyEnabled "okp"}}k8s{{else}}disabled{{end}}'
     spec:
       replicas: 1
       selector:
@@ -43,6 +43,9 @@ data:
               securityContext:
                 allowPrivilegeEscalation: false
                 runAsNonRoot: true
+    {{if eq .Platform.Extension "k8s"}}
+                runAsUser: 1001
+    {{end}}
                 capabilities:
                   drop:
                     - ALL
@@ -104,7 +107,7 @@ data:
     metadata:
       name: lightspeed-okp-{{backstage-name}}
       annotations:
-        rhdh.redhat.com/platform: "ocp"
+        rhdh.redhat.com/platform: '{{if eq .Platform.Extension "ocp"}}ocp{{else if pluginDependencyEnabled "okp"}}k8s{{else}}disabled{{end}}'
     spec:
       type: ClusterIP
       selector:
@@ -118,6 +121,38 @@ data:
           port: 8983
           targetPort: solr
           protocol: TCP
+    ---
+    # OKP (Offline Knowledge Portal) standalone Kubernetes Ingress.
+    # The referenced plugin dependency ConfigMap provides the cluster-specific host and TLS settings.
+    apiVersion: networking.k8s.io/v1
+    kind: Ingress
+    metadata:
+      name: lightspeed-okp-{{backstage-name}}
+      annotations:
+        rhdh.redhat.com/platform: '{{if and (eq .Platform.Extension "k8s") (pluginDependencyEnabled "okp")}}k8s{{else}}disabled{{end}}'
+    spec:
+    {{if pluginDependencyValue "okp" "OKP_INGRESS_CLASS_NAME"}}
+      ingressClassName: {{quote (pluginDependencyValue "okp" "OKP_INGRESS_CLASS_NAME")}}
+    {{end}}
+    {{if isTrue (pluginDependencyValue "okp" "OKP_INGRESS_TLS_ENABLED")}}
+      tls:
+        - hosts:
+            - {{quote (required "OKP_INGRESS_HOST is required when the okp plugin dependency ConfigMap is referenced" (pluginDependencyValue "okp" "OKP_INGRESS_HOST"))}}
+    {{if pluginDependencyValue "okp" "OKP_INGRESS_TLS_SECRET_NAME"}}
+          secretName: {{quote (pluginDependencyValue "okp" "OKP_INGRESS_TLS_SECRET_NAME")}}
+    {{end}}
+    {{end}}
+      rules:
+        - host: {{if pluginDependencyEnabled "okp"}}{{quote (required "OKP_INGRESS_HOST is required when the okp plugin dependency ConfigMap is referenced" (pluginDependencyValue "okp" "OKP_INGRESS_HOST"))}}{{else}}"disabled.invalid"{{end}}
+          http:
+            paths:
+              - path: /
+                pathType: Prefix
+                backend:
+                  service:
+                    name: lightspeed-okp-{{backstage-name}}
+                    port:
+                      name: httpd
   sonataflow.yaml: |
     apiVersion: networking.k8s.io/v1
     kind: NetworkPolicy

@@ -36,6 +36,10 @@ spec:
             # LCORE uses this URL both to query OKP and to construct browser-facing citation links.
             - name: OKP_SERVICE_URL
               value: "http://lightspeed-okp-{{.Backstage.Name}}-{{.Backstage.Namespace}}.{{.OpenShift.IngressDomain}}"
+{{else if pluginDependencyEnabled "okp"}}
+            # On Kubernetes, the referenced OKP dependency ConfigMap supplies the public Ingress host.
+            - name: OKP_SERVICE_URL
+              value: {{if isTrue (pluginDependencyValue "okp" "OKP_INGRESS_TLS_ENABLED")}}{{quote (printf "https://%s" (required "OKP_INGRESS_HOST is required when the okp plugin dependency ConfigMap is referenced" (pluginDependencyValue "okp" "OKP_INGRESS_HOST")))}}{{else}}{{quote (printf "http://%s" (required "OKP_INGRESS_HOST is required when the okp plugin dependency ConfigMap is referenced" (pluginDependencyValue "okp" "OKP_INGRESS_HOST")))}}{{end}}
 {{end}}
             - name: HF_HOME
               value: /tmp/hf_cache

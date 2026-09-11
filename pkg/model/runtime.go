@@ -167,6 +167,7 @@ func InitObjects(ctx context.Context, backstage api.Backstage, externalConfig Ex
 		backstage.Namespace,
 		externalConfig.OpenShiftIngressDomain,
 		platform,
+		externalConfig.PluginDependencyConfigs,
 	)
 
 	// looping through the registered runtimeConfig objects initializing the model

@@ -10,6 +10,7 @@ import (
 	"github.com/redhat-developer/rhdh-operator/pkg/model"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -96,4 +97,28 @@ func TestExtConcatData(t *testing.T) {
 	cm.Data = map[string]string{"key4": "value4", "key2": "value2", "key3": "value3", "key1": "value1"}
 	assert.Equal(t, data1, concatData(original, &cm))
 
+}
+
+func TestPreprocessPluginDependencyConfig(t *testing.T) {
+	ctx := context.TODO()
+	bs := api.Backstage{
+		ObjectMeta: metav1.ObjectMeta{Name: "bs1", Namespace: "ns1"},
+		Spec: api.BackstageSpec{Application: &api.Application{ExtraEnvs: &api.ExtraEnvs{
+			ConfigMaps: []api.EnvObjectRef{{Name: "okp-config", Containers: []string{"lightspeed-core"}}},
+		}}},
+	}
+	cm := corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "okp-config",
+			Namespace: "ns1",
+			Labels:    map[string]string{model.PluginDependencyConfigLabel: "okp"},
+		},
+		Data: map[string]string{"OKP_INGRESS_HOST": "okp.example.com"},
+	}
+	rc := BackstageReconciler{Client: NewMockClient()}
+	require.NoError(t, rc.Create(ctx, &cm))
+
+	extConf, err := rc.preprocessSpec(ctx, bs)
+	require.NoError(t, err)
+	assert.Equal(t, "okp.example.com", extConf.PluginDependencyConfigs["okp"]["OKP_INGRESS_HOST"])
 }

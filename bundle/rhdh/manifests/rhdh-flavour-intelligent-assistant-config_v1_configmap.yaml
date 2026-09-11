@@ -108,10 +108,10 @@ data:
     your question is relevant to these areas, and feel free to ask again!\n    skills:\n
     \     paths:\n        - /app-root/skills\n    mcp_servers:\n      - name: mcp-integration-tools\n
     \       provider_id: 'model-context-protocol'\n        url: 'http://localhost:7007/api/mcp-actions/v1'\n
-    \       authorization_headers:\n          Authorization: 'client'\n    {{if eq
-    .Platform.Extension \"ocp\"}}\n    rag:\n      tool:\n        - okp\n    okp:\n
-    \     rhokp_url: '${env.OKP_SERVICE_URL:=http://localhost:8080}'\n      offline:
-    true\n      chunk_filter_query: 'product:*developer_hub*'\n    {{end}}\n---\nkind:
+    \       authorization_headers:\n          Authorization: 'client'\n    {{if or
+    (eq .Platform.Extension \"ocp\") (pluginDependencyEnabled \"okp\")}}\n    rag:\n
+    \     tool:\n        - okp\n    okp:\n      rhokp_url: '${env.OKP_SERVICE_URL:=http://localhost:8080}'\n
+    \     offline: true\n      chunk_filter_query: 'product:*developer_hub*'\n    {{end}}\n---\nkind:
     ConfigMap\napiVersion: v1\nmetadata:\n  name: rhdh-profile\n  annotations:\n    rhdh.redhat.com/containers:
     \"lightspeed-core\"\n    rhdh.redhat.com/mount-path: \"/app-root\"\n    rhdh.redhat.com/sub-path:
     \"*\"\ndata:\n  rhdh-profile.py: |\n    # There is no need for enforcing line
@@ -284,6 +284,10 @@ data:
                 # LCORE uses this URL both to query OKP and to construct browser-facing citation links.
                 - name: OKP_SERVICE_URL
                   value: "http://lightspeed-okp-{{.Backstage.Name}}-{{.Backstage.Namespace}}.{{.OpenShift.IngressDomain}}"
+    {{else if pluginDependencyEnabled "okp"}}
+                # On Kubernetes, the referenced OKP dependency ConfigMap supplies the public Ingress host.
+                - name: OKP_SERVICE_URL
+                  value: {{if isTrue (pluginDependencyValue "okp" "OKP_INGRESS_TLS_ENABLED")}}{{quote (printf "https://%s" (required "OKP_INGRESS_HOST is required when the okp plugin dependency ConfigMap is referenced" (pluginDependencyValue "okp" "OKP_INGRESS_HOST")))}}{{else}}{{quote (printf "http://%s" (required "OKP_INGRESS_HOST is required when the okp plugin dependency ConfigMap is referenced" (pluginDependencyValue "okp" "OKP_INGRESS_HOST")))}}{{end}}
     {{end}}
                 - name: HF_HOME
                   value: /tmp/hf_cache

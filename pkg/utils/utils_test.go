@@ -150,7 +150,7 @@ func TestPlatformPatchMerge(t *testing.T) {
 
 func TestReadYamlsWithTemplateSubstitution(t *testing.T) {
 	// Set template data
-	SetTemplateData("my-backstage", "my-namespace", "apps.example.com", platform.OpenShift)
+	SetTemplateData("my-backstage", "my-namespace", "apps.example.com", platform.OpenShift, nil)
 	defer func() { templateData = nil }()
 
 	// Read YAML with template variables
@@ -170,7 +170,7 @@ func TestReadYamlsWithTemplateSubstitution(t *testing.T) {
 
 func TestApplyTemplateSkipsNonBackstagePatterns(t *testing.T) {
 	// Set template data
-	SetTemplateData("my-backstage", "my-namespace", "apps.example.com", platform.OpenShift)
+	SetTemplateData("my-backstage", "my-namespace", "apps.example.com", platform.OpenShift, nil)
 	defer func() { templateData = nil }()
 
 	// Content with other {{...}} patterns that are NOT our Backstage variables
@@ -208,12 +208,35 @@ func TestApplyTemplatePlatformConditional(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			SetTemplateData("my-backstage", "my-namespace", "apps.example.com", tt.platform)
+			SetTemplateData("my-backstage", "my-namespace", "apps.example.com", tt.platform, nil)
 			result, err := ApplyTemplate(content)
 			require.NoError(t, err)
 			assert.Equal(t, tt.want, string(result))
 		})
 	}
+}
+
+func TestApplyTemplatePluginDependencyConfig(t *testing.T) {
+	SetTemplateData("my-backstage", "my-namespace", "", platform.Kubernetes, map[string]map[string]string{
+		"okp": {
+			"OKP_INGRESS_HOST":        "okp.example.com",
+			"OKP_INGRESS_TLS_ENABLED": "true",
+		},
+	})
+	defer func() { templateData = nil }()
+
+	content := []byte(`{{if pluginDependencyEnabled "okp"}}{{if isTrue (pluginDependencyValue "okp" "OKP_INGRESS_TLS_ENABLED")}}https{{else}}http{{end}}://{{required "host is required" (pluginDependencyValue "okp" "OKP_INGRESS_HOST")}}{{end}}`)
+	result, err := ApplyTemplate(content)
+	require.NoError(t, err)
+	assert.Equal(t, "https://okp.example.com", string(result))
+}
+
+func TestApplyTemplatePluginDependencyRequiredValue(t *testing.T) {
+	SetTemplateData("my-backstage", "my-namespace", "", platform.Kubernetes, map[string]map[string]string{"okp": {}})
+	defer func() { templateData = nil }()
+
+	_, err := ApplyTemplate([]byte(`{{required "OKP host is required" (pluginDependencyValue "okp" "OKP_INGRESS_HOST")}}`))
+	require.ErrorContains(t, err, "OKP host is required")
 }
 
 func TestGetObjectKind(t *testing.T) {
